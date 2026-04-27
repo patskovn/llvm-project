@@ -1089,11 +1089,13 @@ Error CoverageMapping::loadFromFile(
   return Error::success();
 }
 
-Expected<std::unique_ptr<CoverageMapping>> CoverageMapping::load(
-    ArrayRef<StringRef> ObjectFilenames,
-    std::optional<StringRef> ProfileFilename, vfs::FileSystem &FS,
-    ArrayRef<StringRef> Arches, StringRef CompilationDir,
-    const object::BuildIDFetcher *BIDFetcher, bool CheckBinaryIDs) {
+Expected<std::unique_ptr<CoverageMapping>>
+CoverageMapping::load(ArrayRef<StringRef> ObjectFilenames,
+                      std::optional<StringRef> ProfileFilename,
+                      vfs::FileSystem &FS, ArrayRef<StringRef> Arches,
+                      StringRef CompilationDir,
+                      const object::BuildIDFetcher *BIDFetcher,
+                      bool CheckBinaryIDs, unsigned MaxLoadThreads) {
   std::unique_ptr<IndexedInstrProfReader> ProfileReader;
   if (ProfileFilename) {
     auto ProfileReaderOrErr =
@@ -1120,10 +1122,11 @@ Expected<std::unique_ptr<CoverageMapping>> CoverageMapping::load(
 
   SmallVector<object::BuildID> FoundBinaryIDs;
   unsigned NumFiles = ObjectFilenames.size();
-  constexpr unsigned MaxExportThreads = 32;
-  unsigned NumThreads = std::min(
-      {hardware_concurrency(NumFiles).compute_thread_count(),
-       NumFiles, MaxExportThreads});
+  unsigned NumThreads =
+      MaxLoadThreads <= 1
+          ? 1
+          : std::min({hardware_concurrency(NumFiles).compute_thread_count(),
+                      NumFiles, MaxLoadThreads});
 
   if (NumThreads <= 1) {
     for (const auto &File : llvm::enumerate(ObjectFilenames)) {
